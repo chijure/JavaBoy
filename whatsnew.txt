@@ -1,6 +1,18 @@
 JavaBoy What's New?
 -------------------
 
+Version 0.91
+------------
+
+Applet Mode Changes (when running on a web page)
+- Switch menu from click to double-click to avoid problem with setting focus
+- Added Save to Web feature
+- Added reset option to menu
+- Fixed bad update to border when applet window covered (only on microsoft VM)
+
+Emulation Changes
+- Fixed printing of HDMA data to console slowing down games - Done
+
 
 Version 0.9
 -----------

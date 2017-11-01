@@ -133,6 +133,8 @@ class Cartridge {
 
  boolean cartridgeReady = false;
 
+ boolean needsReset = false;
+
  /** Create a cartridge object, loading ROM and any associated battery RAM from the cartridge
   *  filename given.  Loads via the web if JavaBoy is running as an applet */
  public Cartridge(String romFileName, Component a) {
@@ -196,6 +198,20 @@ class Cartridge {
 
  }
 
+ public boolean needsResetEnable() {
+//  System.out.println("Reset !");
+  if (needsReset) {
+   needsReset = false;
+   System.out.println("Reset requested");
+   return true;
+  } else {
+   return false;
+  }
+ }
+
+ public void resetSystem() {
+  needsReset = true;
+ }
  
  public InputStream openRom(String romFileName, Component a) {
      byte bFormat;
@@ -524,6 +540,24 @@ class Cartridge {
   }
  }
 
+ public int getBatteryRamSize() {
+  int numRamBanks;
+  if (rom[0x149] == 0x03) {
+   numRamBanks = 4;
+  } else {
+   numRamBanks = 1;
+  }
+  return numRamBanks * 8192;
+ }
+
+ public byte[] getBatteryRam() {
+  return ram;
+ }
+
+ public boolean canSave() {
+  return (cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) || (cartType == 6);
+ }
+
  /** Writes an image of battery RAM to disk, if the current cartridge mapper supports it. */
  public void saveBatteryRam() {
   String saveRamFileName = romFileName;
@@ -560,6 +594,14 @@ class Cartridge {
   } catch (IOException e) {
    System.out.println("Error saving battery RAM to '" + saveRamFileName + "'");
   }
+ }
+
+ public void saveBatteryRAMToWeb(URL url, String username, Dmgcpu cpu) {
+  new WebSaveRAM(url, true, this, cpu, username);
+ }
+
+ public void loadBatteryRAMFromWeb(URL url, String username, Dmgcpu cpu) {
+  new WebSaveRAM(url, false, this, cpu, username);
  }
 
  /** Peforms saving of the battery RAM before the object is discarded */
@@ -604,7 +646,7 @@ class Cartridge {
   // Remove NULLs from the end of the cart name
   String s = "";
   for (int r = 0; r < cartName.length(); r++) {
-	if ((int) cartName.charAt(r) != 0) {
+	if (((int) cartName.charAt(r) != 0) && ((int) cartName.charAt(r) >= 32) && ((int) cartName.charAt(r) <= 127)) {
 	 s += cartName.charAt(r);
 	}
   }
@@ -637,4 +679,175 @@ class Cartridge {
   }
  }
 
+}
+
+class NoSaveDataException extends java.lang.Exception {
+ public NoSaveDataException(String s) {
+  super(s);
+ }
+}
+
+class WebSaveRAM implements Runnable, DialogListener {
+ Cartridge cart;
+ boolean save;
+ URL url;
+ Dmgcpu cpu;
+ String username;
+
+ public WebSaveRAM(URL url, boolean save, Cartridge cart, Dmgcpu cpu, String username) {
+  this.url = url;
+  this.save = save;
+  this.cart = cart;
+  this.cpu = cpu;
+  this.username = username;
+
+  if (!cart.canSave()) {
+
+   ModalDialog d = new ModalDialog(null, "Sorry", "This game does not", "have a save facility.");
+
+  } else {
+
+   if (save) {
+    ModalDialog d = new ModalDialog(null, "Confirm", "Are you sure you want to save?", this);
+   } else {
+    ModalDialog d = new ModalDialog(null, "Confirm", "Are you sure you want to load?", this);
+   }
+  }
+ }
+
+ public void yesPressed() {
+  Thread t = new Thread(this);
+  t.start();
+ }
+
+ public void noPressed() {
+  // Object deleted now
+ }
+ 
+ public void run() {
+  Frame f = new Frame("Please Wait...");
+  f.setSize(200, 120);
+
+  try {
+   if (save) {
+    f.add(new Label("Please wait, saving"), "North");
+    f.add(new Label("game data to web server..."), "Center");   
+    f.show();
+    saveRam();
+    new ModalDialog(null, "Sucess!", "Game data", "Saved ok.");
+   } else {
+    f.add(new Label("Please wait, loading"), "North");
+    f.add(new Label("game data from web server..."), "Center");   
+    f.show();
+    loadRam();
+    new ModalDialog(null, "Success!", "Game data", "loaded ok.");
+   }
+  } catch (NoSaveDataException e) {
+   System.out.println("Error! " + e);
+   new ModalDialog(null, "Error!", "No save data can be found on the server!", e.toString());
+  } catch (Exception e) {
+   System.out.println("Error! " + e);
+   new ModalDialog(null, "Error!", "Load/Save error!  Report to site administrator.", e.toString());
+  }
+  f.hide();
+ }
+
+ public void saveRam() throws Exception {
+   if (username == null) throw new Exception("No username provided");
+
+   url = new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile() + "?user=" + URLEncoder.encode(username));
+
+   HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+
+   conn.setRequestMethod("POST");
+   conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+   conn.setDoOutput(true);
+   conn.setDoInput(true);
+
+   conn.connect();
+
+   DataOutputStream printout = new DataOutputStream(conn.getOutputStream());
+
+   StringBuffer saveData = new StringBuffer("");
+   byte[] ram = cart.getBatteryRam();
+
+    for (int r = 0; r < cart.getBatteryRamSize(); r++) {
+    saveData.append(JavaBoy.hexByte(ram[r]));
+   }
+//   saveData = URLEncoder.encode("Hel\0lo");
+
+   String content = "gamename=" + URLEncoder.encode(cart.getCartName()) + "&user=" + URLEncoder.encode(username) + "&datalength=" + (cart.getBatteryRamSize() * 2) + "&data0=" + saveData;
+
+   System.out.println(content);
+
+   printout.writeBytes(content);
+   printout.flush ();
+   printout.close ();
+ 
+   conn.disconnect();
+
+   DataInputStream input = new DataInputStream (conn.getInputStream());
+   String str;
+   while (null != ((str = input.readLine()))) {
+    System.out.println(str);
+   }
+
+   System.out.println("OK!");
+  }
+ 
+  public void loadRam() throws Exception {
+   if (username == null) throw new Exception("No username provided");
+
+   url = new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile() + "?user=" + URLEncoder.encode(username));
+
+   HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+   conn.setRequestMethod("POST");
+   conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+   conn.setDoOutput(true);
+   conn.setDoInput(true);
+
+   conn.connect();
+
+   DataOutputStream printout = new DataOutputStream(conn.getOutputStream());
+
+
+   String content = "gamename=" + URLEncoder.encode(cart.getCartName());
+
+   System.out.println(content);
+
+   printout.writeBytes(content);
+   printout.flush ();
+   printout.close ();
+ 
+   conn.disconnect();
+
+   DataInputStream input = new DataInputStream (conn.getInputStream());
+   String str;
+   str = input.readLine();
+
+   // No save
+   if (str.equals("NOSAVERAM")) {
+	throw new NoSaveDataException("");
+   }
+
+   // General error
+   if (str.startsWith("ERROR")) {
+	throw new Exception(str);
+   }
+ 
+
+   int pos = 0;
+   try {
+    for (int r = 0; r < cart.getBatteryRamSize(); r++) {
+     String sub = str.substring(r * 2, r * 2 + 2);
+     int val = Integer.valueOf(sub, 16).intValue();
+	 cart.ram[r] = (byte) val;
+    }
+   } catch (Exception e) {
+	throw e;
+   }
+   cpu.reset();
+  }
 }

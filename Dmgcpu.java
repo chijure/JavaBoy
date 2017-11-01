@@ -567,7 +567,7 @@ class Dmgcpu {
 //     System.out.println("VBLANK!");
      for (int r = 144; r < 170; r++) {
       graphicsChip.notifyScanline(r);
-     }
+     } 
      if ( ((ioHandler.registers[0x40] & 0x80) != 0) && ((ioHandler.registers[0xFF] & INT_VBLANK) != 0) ) {
       triggerInterrupt(INT_VBLANK);
      }
@@ -596,7 +596,11 @@ class Dmgcpu {
      ioHandler.registers[0x44] = 0;
      if (soundChip != null) soundChip.outputSound();
      graphicsChip.frameDone = false;
-     applet.repaint();
+	 if (JavaBoy.runningAsApplet) {
+      ((JavaBoy) (applet)).drawNextFrame();
+	 } else {
+      ((GameBoyScreen) (applet)).repaint();
+	 }
      try {
       while (!graphicsChip.frameDone) {
        java.lang.Thread.sleep(1);
@@ -613,6 +617,7 @@ class Dmgcpu {
 
  /** Execute the specified number of Gameboy instructions.  Use '-1' to execute forever */
  public final void execute(int numInstr) {
+
   terminate = false;
   short newf;
   int dat;

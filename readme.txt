@@ -1,5 +1,5 @@
 
-                                 JavaBoy v0.9
+                                 JavaBoy v0.91
                      The portable Gameboy emulator for Java
                http://www.millstone.demon.co.uk/download/javaboy
 
@@ -125,6 +125,70 @@ games which don't work, or display major faults. If you find a game which is
 not listed on the compatibility page which doesn't work, email me and I may
 fix it in a later version. No promises though, as these things are
 notoriously hard to track now.
+
+Q: How do I save my game when running JavaBoy on a web site?
+
+A: In version 0.91 and above, JavaBoy supports sending save data to a website.
+The data is sent as an HTTP post request to a specified URL.
+
+What this means is that you need a server which supports some form of 
+scripting, and to write a script which performs the saving.  Sample PHP
+script is included in this archive which will do the job.  The script
+was kindly contributed by Daniel Fisher.  This script saves text files 
+for each user.  They are called 'saveram.php' and 'loadram.php'.
+
+If your server doesn't support PHP, or you want to save in a different 
+way (perhaps to a database) you will have to write your own script.  You 
+will need programming knowledge for this.
+
+If you're using free web space, you're probably out of luck, as these almost
+never support scripting.  You can still use JavaBoy, but you won't be able
+to save your game.
+
+To set the URL used for saves, include the following in your <APPLET> tag:
+
+<PARAM NAME="SAVERAMURL" VALUE="[Your URL Here]">
+<PARAM NAME="LOADRAMURL" VALUE="[Your URL Here]">
+<PARAM NAME="USERNAME" VALUE="[Your user here]">
+
+The SaveRamURL is the address that save data is submitted to, and the
+LoadRamURL is the address that data is loaded from.
+
+The Username allows you to keep several user's saves private.  The username
+is passed to the url to allow the server to determine who's save is in use.
+
+When these parameters are specified, two extra options appear on JavaBoy's
+menu, Save and Load.
+
+When Save is selected, JavaBoy opens a connection to the SaveRamURL.  
+The field is called 'user'.  The POST section of the request contains the 
+folllowing fields:
+
+'gamename' - The name of the game being played (internal ROM name)
+'user' - The user that was passed to the applet as the 'USERNAME' parameter.
+'datalength' - The number of bytes that need to be saved.
+'data0' - The save data itself, a long string, the length of which is equal
+to 'datalength'.
+
+The applet doesn't require any particular response from the server.
+
+When Loading data, a similar process occurs.  This time, the user variable
+is passed on the GET method of the URL, which lets the server determine
+which user is performing the load.  The 'gamename' variable is sent via
+the POST method.  The server must respond with the 'data0' field which
+was sent to it when the game was saved. 
+
+If there was no save data, the user should return with the string 
+'NOSAVERAM'.  A general error condition can be indicated by returning
+'ERROR' followed on the same line with details of the error.  The
+details will be shown to the user.
+
+Please note that to save, JavaBoy must be loaded from the same server
+that is used to save the data.  If these differ, Java will throw a security
+exception.  This is because all unsigned Java apps on a web page run in
+a sandbox that doesn't allow them to contact servers other than the one
+they were loaded from.
+
 
 Q: How do I compile JavaBoy? 
 

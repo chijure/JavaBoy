@@ -115,7 +115,7 @@ class IoHandler {
   int dmaDst = ((JavaBoy.unsign(registers[0x53]) & 0x1F) << 8) +
                 (JavaBoy.unsign(registers[0x54]) & 0xF0) + 0x8000;
 
-  System.out.println("Copied 16 bytes from " + JavaBoy.hexWord(dmaSrc) + " to " + JavaBoy.hexWord(dmaDst));
+//  System.out.println("Copied 16 bytes from " + JavaBoy.hexWord(dmaSrc) + " to " + JavaBoy.hexWord(dmaDst));
 
   for (int r = 0; r < 16; r++) {
    dmgcpu.addressWrite(dmaDst + r, dmgcpu.addressRead(dmaSrc + r));

@@ -39,6 +39,18 @@ Emulation Changes
 - Much more accurate emulation of sound channel 4 (noise) - Done
 - Flipped double height sprites are now handled properly - Done
 
+Version 0.91
+
+Applet Mode Changes
+- Switch menu from click to double-click to avoid problem with setting focus - Done
+- Added Save to Web feature - Done
+- Added reset option to menu - Done
+- Fixed bad update to border when applet window covered (only on microsoft vm) - Done
+
+Emulation Changes
+- Fixed printing of HDMA data to console slowing down games - Done
+
+
 */
 
 import java.awt.*;
@@ -68,6 +80,7 @@ import javax.sound.sampled.*;
  */
 
 
+
 public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener, WindowListener, MouseListener, ActionListener, ItemListener {
  private final int WIDTH = 160;
  private final int HEIGHT = 144;
@@ -75,12 +88,15 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
  private static final String hexChars = "0123456789ABCDEF";
 
  /** The version string is displayed on the title bar of the application */
- private static String versionString = "0.90";
+ private static String versionString = "0.91";
 
  private boolean appletRunning = true;
  public static boolean runningAsApplet;
  private Image backBuffer;
  private boolean gameRunning;
+ private boolean fullFrame = true;
+
+ private boolean saveToWebEnable = false;
 
  /** These strings contain all the names for the colour schemes.
   *  A scheme can be activated using the view menu when JavaBoy is
@@ -157,6 +173,8 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
  int stripTimer = 0;
  PopupMenu popupMenu;
 
+ long lastClickTime = 0;
+
  /** Outputs a line of debugging information */
  static public void debugLog(String s) {
   System.out.println("Debug: " + s);
@@ -202,12 +220,19 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
    int x = getSize().width / 2 - dmgcpu.graphicsChip.getWidth() / 2;
    int y = getSize().height / 2 - dmgcpu.graphicsChip.getHeight() / 2;
 
-   if (stripTimer > stripLength) {
-    if (imageSizeChanged) {
-	 g.setColor(new Color(255, 255, 255));
- 	 g.fillRect(0, 0, getSize().width, getSize().height);
-	 imageSizeChanged = false;
-	}
+   if ((stripTimer > stripLength) && (!fullFrame) && (!imageSizeChanged)) {
+   /* if ((imageSizeChanged) || (fullFrame)) {
+	 if (dmgcpu.graphicsChip.isFrameReady()) {
+	  g.setColor(new Color((int) (Math.random() * 255), (int) (Math.random() * 255), (int) (Math.random() * 255)));
+ 	  g.fillRect(0, 0, getSize().width, getSize().height);
+ 	  imageSizeChanged = false;
+   	  if (fullFrame) {
+	   System.out.println("fullframe is " + fullFrame + " at "+ System.currentTimeMillis());
+	  }
+
+	 }
+	}*/
+	
     dmgcpu.graphicsChip.draw(g, x, y, this);
 	
    } else {
@@ -234,18 +259,20 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
      bufferGraphics.setColor(new Color(128,128,255));
      bufferGraphics.fillRect(0, stripPos, getSize().width, 2);
  
- 	 if (stripTimer < stripLength / 2) {
- 	     bufferGraphics.setColor(new Color(255, 255, 255));
-	     bufferGraphics.drawString("JavaBoy - Neil Millstone", 2, stripPos + 12);
-	     bufferGraphics.setColor(new Color(255, 255, 255));
- 		 bufferGraphics.drawString("www.millstone.demon.co.uk", 2, stripPos + 24);
- 	     bufferGraphics.drawString("/download/javaboy", 2, stripPos + 36);
-	 } else {
-	     bufferGraphics.setColor(new Color(255, 255, 255));
-	     bufferGraphics.drawString("ROM: " + cartridge.getCartName(), 2, stripPos + 12);
-	 	 bufferGraphics.drawString("Click in window for options", 2, stripPos + 24);
-	     bufferGraphics.drawString("Emulator version: " + versionString, 2, stripPos + 36);
-	 }
+     if (stripTimer < stripLength) {
+		if (stripTimer < stripLength / 2) {
+			 bufferGraphics.setColor(new Color(255, 255, 255));
+			 bufferGraphics.drawString("JavaBoy - Neil Millstone", 2, stripPos + 12);
+			 bufferGraphics.setColor(new Color(255, 255, 255));
+			 bufferGraphics.drawString("www.millstone.demon.co.uk", 2, stripPos + 24);
+			 bufferGraphics.drawString("/download/javaboy", 2, stripPos + 36);
+		 } else {
+			 bufferGraphics.setColor(new Color(255, 255, 255));
+			 bufferGraphics.drawString("ROM: " + cartridge.getCartName(), 2, stripPos + 12);
+			 bufferGraphics.drawString("Double click for options", 2, stripPos + 24);
+			 bufferGraphics.drawString("Emulator version: " + versionString, 2, stripPos + 36);
+		 }
+	}
 
      stripTimer++;
  	 g.drawImage(doubleBuffer, 0, 0, this);
@@ -270,11 +297,19 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
    g.drawString("Charging flux capacitor...", 10, 40);
    g.drawString("Loading game ROM...", 10, 50);
   }
+  
+  
  }
 
  /** Checks for mouse clicks when running as an applet */
  public void mouseClicked(MouseEvent e) {
-  popupMenu.show(e.getComponent(), e.getX(), e.getY());
+  long doubleClickTime = (System.currentTimeMillis() - lastClickTime);
+  
+  if (doubleClickTime <= 250) {
+   popupMenu.show(e.getComponent(), e.getX(), e.getY());
+  }
+//  System.out.println("Click! " + );
+  lastClickTime = System.currentTimeMillis();
  }
 
  public void mouseEntered(MouseEvent e) {
@@ -317,6 +352,36 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
    dmgcpu.graphicsChip.frameSkip = 3;
   } else if (e.getActionCommand().equals("FrameSkip: 3")) {
    dmgcpu.graphicsChip.frameSkip = 4;
+  } else if (e.getActionCommand().equals("Reset")) {
+   dmgcpu.reset();
+  } else if (e.getActionCommand().equals("Save")) {
+
+
+   try {
+    dmgcpu.cartridge.saveBatteryRAMToWeb(new URL(getParameter("SAVERAMURL")), getParameter("USERNAME"), dmgcpu);
+   } catch (MalformedURLException ex) {
+
+   }
+
+//   f.hide();
+
+
+
+  } else if (e.getActionCommand().equals("Load")) {
+   try {
+//    dmgcpu.terminateProcess();
+    dmgcpu.cartridge.loadBatteryRAMFromWeb(new URL(getParameter("LOADRAMURL")), getParameter("USERNAME"), dmgcpu);
+//	do {
+  //   java.lang.Thread.sleep(1);
+ 	//} while (!dmgcpu.cartridge.needsResetEnable());
+	System.out.println("Resetting...");
+//	dmgcpu.terminate = false;
+//	dmgcpu.execute(-1);
+   } catch (Exception ex) {
+
+   }
+
+
   } else if (e.getActionCommand().equals("JavaBoy Website")) {
    try {
     getAppletContext().showDocument(new URL(WEBSITE_URL), "_new");
@@ -352,6 +417,14 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
 
  public void update(Graphics g) {
   paint(g);
+  fullFrame = true;
+  //System.out.println("fullframe true");
+ }
+ 
+ public void drawNextFrame() {
+  //System.out.println("fullframe false");
+  fullFrame = false;
+  repaint();
  }
 
  public void keyTyped(KeyEvent e) {
@@ -784,9 +857,11 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
  }
 
  public void windowActivated(WindowEvent e) {
+  System.out.println("Activated");
  }
 
  public void windowDeactivated(WindowEvent e) {
+  System.out.println("Deactivated");
  }
 
  public JavaBoy() {
@@ -837,11 +912,21 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
   this.requestFocus();
   p.start();
 
+  saveToWebEnable = getParameter("SAVERAMURL") != null;
+
   popupMenu = new java.awt.PopupMenu();
   popupMenu.add("JavaBoy " + versionString);
   popupMenu.add("-");
   popupMenu.add("Define Controls");
   popupMenu.add(soundCheck = new java.awt.CheckboxMenuItem("Sound"));
+  popupMenu.add("-");
+  popupMenu.add("Reset");
+
+  if (saveToWebEnable) {
+   popupMenu.add("Save");
+   popupMenu.add("Load");
+  }
+  
   popupMenu.add("-");
   popupMenu.add("Size: 1x");
   popupMenu.add("Size: 2x");
@@ -875,8 +960,11 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
    } else {
     executeDebuggerScript(getParameter("AUTOSCRIPT"));
    }*/
-   dmgcpu.reset();
-   dmgcpu.execute(-1);
+
+   do {
+    dmgcpu.reset();
+    dmgcpu.execute(-1);
+   } while (appletRunning);
   }
 
   do {
