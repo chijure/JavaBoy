@@ -28,6 +28,7 @@ import java.lang.*;
 import java.io.*;
 import java.applet.*;
 import java.net.*;
+import java.util.Calendar;
 import java.awt.event.KeyListener;
 import java.awt.event.WindowListener;
 import java.awt.event.ActionListener;
@@ -68,15 +69,15 @@ class Cartridge {
      "ROM+RAM",              /* 08 */
      "ROM+RAM+BATTERY",      /* 09 */
      "Unknown",              /* 0A */
-     "Unsupported ROM+MMM01+SRAM",             /* 0B */
-     "Unsupported ROM+MMM01+SRAM+BATTERY",     /* 0C */
-     "Unknown",                                /* 0D */
-     "Unsupported ROM+MBC3+TIMER+BATTERY",     /* 0E */
-     "Unsupported ROM+MBC3+TIMER+RAM+BATTERY", /* 0F */
-     "Unsupported ROM+MBC3",                   /* 10 */
-     "Unsupported ROM+MBC3+RAM",               /* 11 */
-     "Unsupported ROM+MBC3+RAM+BATTERY",       /* 12 */
-     "Unknown",              /* 13 */
+	 "Unsupported ROM+MMM01",/* 0B */
+     "Unsupported ROM+MMM01+SRAM",             /* 0C */
+     "Unsupported ROM+MMM01+SRAM+BATTERY",     /* 0D */
+	 "Unknown",				 /* 0E */
+     "ROM+MBC3+TIMER+BATTERY",     /* 0F */
+     "ROM+MBC3+TIMER+RAM+BATTERY", /* 10 */
+     "ROM+MBC3",             /* 11 */
+     "ROM+MBC3+RAM",         /* 12 */
+     "ROM+MBC3+RAM+BATTERY", /* 13 */
      "Unknown",              /* 14 */
      "Unknown",              /* 15 */
      "Unknown",              /* 16 */
@@ -94,6 +95,13 @@ class Cartridge {
   final byte bZip = 1;
   final byte bJar = 2;
   final byte bGZip = 3;
+
+  /** RTC Reg names */
+  final byte SECONDS = 0;
+  final byte MINUTES = 1;
+  final byte HOURS = 2;
+  final byte DAYS_LO = 3;
+  final byte DAYS_HI = 4;
 
 
  /** Contains the complete ROM image of the cartridge */
@@ -134,6 +142,12 @@ class Cartridge {
  boolean cartridgeReady = false;
 
  boolean needsReset = false;
+ 
+ /** Real time clock registers.  Only used on MBC3 */
+ int[] RTCReg = new int[5];
+ long realTimeStart;
+ long lastSecondIncrement;
+ String romIntFileName;
 
  /** Create a cartridge object, loading ROM and any associated battery RAM from the cartridge
   *  filename given.  Loads via the web if JavaBoy is running as an applet */
@@ -175,8 +189,8 @@ class Cartridge {
    } while (total > 0);
    is.close();
 
-   JavaBoy.debugLog("Loaded ROM '" + romFileName + "'.  " + numBanks + " banks, " + (numBanks * 16) + "Kb.");
-   JavaBoy.debugLog("Type: " + cartTypeTable[cartType]);
+   JavaBoy.debugLog("Loaded ROM '" + romFileName + "'.  " + numBanks + " banks, " + (numBanks * 16) + "Kb.  " + getNumRAMBanks() + " RAM banks.");
+   JavaBoy.debugLog("Type: " + cartTypeTable[cartType] + " (" + JavaBoy.hexByte(cartType) + ")");
 
    if (!verifyChecksum() && (a instanceof Frame)) {
     new ModalDialog((Frame) a, "Warning", "This cartridge has an invalid checksum.", "It may not execute correctly.");
@@ -185,6 +199,24 @@ class Cartridge {
    if (!JavaBoy.runningAsApplet) {
     loadBatteryRam();
    }
+
+   // Set up the real time clock
+    Calendar rightNow = Calendar.getInstance();
+
+	int days = rightNow.get(Calendar.DAY_OF_YEAR);
+	int hour = rightNow.get(Calendar.HOUR_OF_DAY);
+	int minute = rightNow.get(Calendar.MINUTE);
+	int second = rightNow.get(Calendar.SECOND);
+
+	RTCReg[SECONDS] = second;
+	RTCReg[MINUTES] = minute;
+	RTCReg[HOURS] = hour;
+	RTCReg[DAYS_LO] = days & 0x00FF;
+	RTCReg[DAYS_HI] = (days & 0x01FF) >> 8;
+
+	realTimeStart = System.currentTimeMillis();
+	lastSecondIncrement = realTimeStart;
+
 
    cartridgeReady = true;
 
@@ -212,6 +244,44 @@ class Cartridge {
  public void resetSystem() {
   needsReset = true;
  }
+
+ public void update() {
+  // Update the realtime clock from the system time
+  long millisSinceLastUpdate = System.currentTimeMillis() - lastSecondIncrement;
+
+  while (millisSinceLastUpdate > 1000) {
+   millisSinceLastUpdate -= 1000;
+   RTCReg[SECONDS]++;
+   if (RTCReg[SECONDS] == 60) {
+    RTCReg[MINUTES]++;
+	RTCReg[SECONDS] = 0;
+	if (RTCReg[MINUTES] == 60) {
+     RTCReg[HOURS]++;
+	 RTCReg[MINUTES] = 0;
+	 if (RTCReg[HOURS] == 24) {
+	  if (RTCReg[DAYS_LO] == 255) {
+       RTCReg[DAYS_LO] = 0;
+	   RTCReg[DAYS_HI] = 1;
+	  } else {
+       RTCReg[DAYS_LO]++;
+	  }
+	  RTCReg[HOURS] = 0;
+	 }
+	}
+   }
+   lastSecondIncrement = System.currentTimeMillis();
+  }
+ }
+
+ String stripExtention(String filename) {
+   int dotPosition = filename.lastIndexOf('.');
+
+   if (dotPosition != -1) {
+    return filename.substring(0, dotPosition);
+   } else {
+    return filename;
+   }
+ }
  
  public InputStream openRom(String romFileName, Component a) {
      byte bFormat;
@@ -231,6 +301,7 @@ class Cartridge {
 	// Simplest case, open plain gb or gbc file.
      if (bFormat == bNotCompressed) {
 	   try {
+	    romIntFileName = stripExtention(romFileName);
 	    if (JavaBoy.runningAsApplet) {
 		 return new java.net.URL(((Applet) (a)).getDocumentBase(), romFileName).openStream();
 		} else {
@@ -264,6 +335,7 @@ class Cartridge {
 			 String str = ze.getName();
 			 if (str.toUpperCase().indexOf(".GB") > -1 || str.toUpperCase().indexOf(".GBC") > -1) {
 			   bFoundGBROM = true;
+			   romIntFileName = stripExtention(str);
 			   romName = str;
 			   // Leave loop if a ROM was found.
 			   break;
@@ -289,6 +361,7 @@ class Cartridge {
 
      if (bFormat == bGZip) {
        System.out.println("Loading GZIP Compressed ROM");
+       romIntFileName = stripExtention(romFileName);
 	   try {
  	    if (JavaBoy.runningAsApplet) {
     	    return new java.util.zip.GZIPInputStream(new java.net.URL(((Applet) (a)).getDocumentBase(), romFileName).openStream());
@@ -315,7 +388,24 @@ class Cartridge {
 //   return (byte) (rom[addr] & 0x00FF);
 //  } else {
    if ((addr >= 0xA000) && (addr <= 0xBFFF)) {
-    return ram[addr - 0xA000 + ramPageStart];
+    switch (cartType) {
+	 case 0x0F :
+     case 0x10 :
+     case 0x11 :
+     case 0x12 :
+     case 0x13 : {	/* MBC3 */
+	  if (ramBank >= 0x04) {
+//	   System.out.println("Reading RTC reg " + ramBank + " is " + RTCReg[ramBank - 0x08]);
+	   return (byte) RTCReg[ramBank - 0x08];
+	  } else {
+       return ram[addr - 0xA000 + ramPageStart];
+	  }
+	 }
+
+	 default : {
+      return ram[addr - 0xA000 + ramPageStart];
+	 }
+	}
    } if (addr < 0x4000) {
     return (byte) (rom[addr]);
    } else {
@@ -447,7 +537,7 @@ class Cartridge {
      if (mbc1LargeRamMode) {
       ramBank = (data & 0x03);
       ramPageStart = ramBank * 0x2000;
-      System.out.println("RAM bank " + ramBank + " selected!");
+//      System.out.println("RAM bank " + ramBank + " selected!");
      } else {
       mapRom((currentBank & 0x1F) | ((data & 0x03) << 5));
      }
@@ -466,6 +556,52 @@ class Cartridge {
     }
 
     break;
+
+   case 0x0F :
+   case 0x10 :
+   case 0x11 :
+   case 0x12 :
+   case 0x13 :	/* MBC3 */
+
+    // Select ROM bank
+    if ((addr >= 0x2000) && (addr <= 0x3FFF)) {
+     int bankNo = data & 0x7F;
+     if (bankNo == 0) bankNo = 1;
+     mapRom(bankNo);
+    } else if ((addr <= 0x5FFF) && (addr >= 0x4000)) {
+	// Select RAM bank
+     ramBank = data;
+
+	 if (ramBank < 0x04) {
+      ramPageStart = ramBank * 0x2000;
+	 }
+//     System.out.println("RAM bank " + ramBank + " selected!");
+	} 
+    if ((addr >= 0xA000) && (addr <= 0xBFFF)) {
+     // Let the game write to RAM
+ 	 if (ramBank <= 0x03) {
+      ram[addr - 0xA000 + ramPageStart] = (byte) data;
+     } else {
+ 	// Write to realtime clock registers
+	 RTCReg[ramBank - 0x08] = data;
+//     System.out.println("RTC Reg " + ramBank + " = " + data);
+	}
+
+   }
+/*	if ((addr >= 0x6000) && (addr <= 0x7FFF)) {
+     if ((data & 1) == 1) {
+      mbc1LargeRamMode = true;
+      System.out.println("Small Ram");
+//      ram = new byte[0x8000];
+     } else {
+      mbc1LargeRamMode = false;
+      System.out.println("Large Ram");
+//      ram = new byte[0x2000];
+     }
+	}*/
+
+    break;
+
 
    case 0x19 :
    case 0x1A :
@@ -498,6 +634,25 @@ class Cartridge {
 
  }
 
+ public int getNumRAMBanks() {
+  switch (rom[0x149]) {
+   case 0: {
+	return 0;
+   }
+   case 1: 
+   case 2: {
+	return 1;
+   }
+   case 3: {
+	return 4;
+   }
+   case 4: {
+    return 16;
+   }
+  }
+  return 0;
+ }
+
  /** Read an image of battery RAM into memory if the current cartridge mapper supports it.
   *  The filename is the same as the ROM filename, but with a .SAV extention.
 # *  Files are compatible with VGB-DOS.
@@ -515,13 +670,14 @@ class Cartridge {
     saveRamFileName = romFileName + ".sav";
    }
 
-   if (rom[0x149] == 0x03) {
+/*   if (rom[0x149] == 0x03) {
     numRamBanks = 4;
    } else {
     numRamBanks = 1;
-   }
+   }*/
+   numRamBanks = getNumRAMBanks();
 
-   if ((cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) ) {
+   if ((cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) || (cartType == 0x10) || (cartType == 0x13) ) {
     FileInputStream is = new FileInputStream(new File(saveRamFileName));
     is.read(ram, 0, numRamBanks * 8192);
     is.close();
@@ -542,12 +698,11 @@ class Cartridge {
 
  public int getBatteryRamSize() {
   int numRamBanks;
-  if (rom[0x149] == 0x03) {
-   numRamBanks = 4;
+  if (rom[0x149] == 0x06) {
+   return 512;
   } else {
-   numRamBanks = 1;
+   return getNumRAMBanks() * 8192;
   }
-  return numRamBanks * 8192;
  }
 
  public byte[] getBatteryRam() {
@@ -555,7 +710,7 @@ class Cartridge {
  }
 
  public boolean canSave() {
-  return (cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) || (cartType == 6);
+  return (cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) || (cartType == 6) || (cartType == 0x10) || (cartType == 0x13);
  }
 
  /** Writes an image of battery RAM to disk, if the current cartridge mapper supports it. */
@@ -563,11 +718,12 @@ class Cartridge {
   String saveRamFileName = romFileName;
   int numRamBanks;
 
-  if (rom[0x149] == 0x03) {
+/*  if (rom[0x149] == 0x03) {
    numRamBanks = 4;
   } else {
    numRamBanks = 1;
-  }
+  }*/
+  numRamBanks = getNumRAMBanks();
 
   try {
    int dotPosition = romFileName.lastIndexOf('.');
@@ -578,7 +734,7 @@ class Cartridge {
     saveRamFileName = romFileName + ".sav";
    }
 
-   if ((cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) ) {
+   if ((cartType == 3) || (cartType == 9) || (cartType == 0x1B) || (cartType == 0x1E) || (cartType == 0x10) || (cartType == 0x13)) {
     FileOutputStream os = new FileOutputStream(new File(saveRamFileName));
     os.write(ram, 0, numRamBanks * 8192);
     os.close();
@@ -628,6 +784,10 @@ class Cartridge {
  /** Gets the cartridge name */
  String getCartName() {
 	return cartName;
+ }
+
+ String getRomFilename() {
+    return romIntFileName;
  }
 
  /** Outputs information about the loaded cartridge to stdout. */
@@ -753,7 +913,16 @@ class WebSaveRAM implements Runnable, DialogListener {
  }
 
  public void saveRam() throws Exception {
-   if (username == null) throw new Exception("No username provided");
+//   if (username == null) throw new Exception("No username provided");
+
+   String params = "";
+   String strUrl = url.toString();
+   int questionPos = strUrl.indexOf("?");
+   if (questionPos != -1) {
+    params = "&" + strUrl.substring(questionPos + 1, strUrl.length());
+   }
+
+   System.out.println("Params: (" + url + ") " + params);
 
    url = new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile() + "?user=" + URLEncoder.encode(username));
 
@@ -772,12 +941,12 @@ class WebSaveRAM implements Runnable, DialogListener {
    StringBuffer saveData = new StringBuffer("");
    byte[] ram = cart.getBatteryRam();
 
-    for (int r = 0; r < cart.getBatteryRamSize(); r++) {
-    saveData.append(JavaBoy.hexByte(ram[r]));
+   for (int r = 0; r < cart.getBatteryRamSize(); r++) {
+    saveData.append(JavaBoy.hexByte(JavaBoy.unsign(ram[r])));
    }
 //   saveData = URLEncoder.encode("Hel\0lo");
 
-   String content = "gamename=" + URLEncoder.encode(cart.getCartName()) + "&user=" + URLEncoder.encode(username) + "&datalength=" + (cart.getBatteryRamSize() * 2) + "&data0=" + saveData;
+   String content = "romname=" + URLEncoder.encode(cart.getRomFilename()) + "&gamename=" + URLEncoder.encode(cart.getCartName()) + "&user=" + URLEncoder.encode(username) + "&datalength=" + (cart.getBatteryRamSize() * 2) + "&data0=" + saveData + params;
 
    System.out.println(content);
 
@@ -797,9 +966,18 @@ class WebSaveRAM implements Runnable, DialogListener {
   }
  
   public void loadRam() throws Exception {
-   if (username == null) throw new Exception("No username provided");
+//   if (username == null) throw new Exception("No username provided");
 
-   url = new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile() + "?user=" + URLEncoder.encode(username));
+   String params = "";
+   String strUrl = url.toString();
+   int questionPos = strUrl.indexOf("?");
+   if (questionPos != -1) {
+    params = "&" + strUrl.substring(questionPos + 1, strUrl.length());
+   }
+
+   System.out.println("Params: (" + url + ") " + params);
+
+   url = new URL(url.getProtocol(), url.getHost(), url.getPort(), url.getFile() + "?user=" + URLEncoder.encode(username) + params);
 
    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
 
@@ -813,9 +991,9 @@ class WebSaveRAM implements Runnable, DialogListener {
    DataOutputStream printout = new DataOutputStream(conn.getOutputStream());
 
 
-   String content = "gamename=" + URLEncoder.encode(cart.getCartName());
+   String content = "gamename=" + URLEncoder.encode(cart.getCartName()) + "&romname=" + URLEncoder.encode(cart.getRomFilename());
 
-   System.out.println(content);
+//   System.out.println(content);
 
    printout.writeBytes(content);
    printout.flush ();

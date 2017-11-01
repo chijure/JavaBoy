@@ -41,6 +41,7 @@ import java.util.StringTokenizer;
 import javax.sound.sampled.*;
 
 
+
 /** This class is one implementation of the GraphicsChip.
  *  It performs the output of the graphics screen, including the background, window, and sprite layers.
  *  It supports some raster effects, but only ones that happen on a tile row boundary.
@@ -48,6 +49,14 @@ import javax.sound.sampled.*;
 class TileBasedGraphicsChip extends GraphicsChip {
  /** Tile cache */
  GameboyTile[] tiles = new GameboyTile[384 * 2];
+
+ // Hacks to allow some raster effects to work.  Or at least not to break as badly.
+ boolean savedWindowDataSelect = false;
+ boolean spritesEnabledThisFrame = false;
+
+ boolean windowEnableThisLine = false;
+ int windowStopLine = 144;
+
 
  public TileBasedGraphicsChip(Component a, Dmgcpu d) {
   super(a, d);
@@ -163,10 +172,15 @@ class TileBasedGraphicsChip extends GraphicsChip {
     tiles[tileNum].draw(back, spriteX, spriteY, spriteAttrib);
    }
 
+//   back.drawString("" + tileNum, spriteX * 2, spriteY * 2);
+//   System.out.println("Sprite " + i + ": " + spriteX + ", " + spriteY);
+
    if (doubledSprites) {
     if (tiles[tileNum + 1].invalid(spriteAttrib)) {
      tiles[tileNum + 1].validate(videoRam, vidRamAddress + 16, spriteAttrib);
     }
+	
+
     if ((spriteAttrib & TILE_FLIPY) != 0) {
      tiles[tileNum + 1].draw(back, spriteX, spriteY, spriteAttrib);
     } else {
@@ -189,10 +203,33 @@ class TileBasedGraphicsChip extends GraphicsChip {
 
   if (line == 0) {
    clearFrameBuffer();
-   if (spritesEnabled) drawSprites(backBuffer.getGraphics(), 1);
+   /*if (spritesEnabledThisFrame)*/ drawSprites(backBuffer.getGraphics(), 1);
+   spritesEnabledThisFrame = spritesEnabled;
+   windowStopLine = 144;
+   windowEnableThisLine = winEnabled;
   }
 
-  if (!bgEnabled) return;
+  // SpritesEnabledThisFrame should be true if sprites were ever on this frame
+  if (spritesEnabled) spritesEnabledThisFrame = true;
+
+  if (windowEnableThisLine) {
+   if (!winEnabled) {
+    windowStopLine = line;
+	windowEnableThisLine = false;
+//	System.out.println("Stop line: " + windowStopLine);
+   }
+  }
+
+  // Fix to screwed up status bars.  Record which data area is selected on the
+  // first line the window is to be displayed.  Will work unless this is changed
+  // after window is started
+  // NOTE: Still no real support for hblank effects on window/sprites
+  if (line == JavaBoy.unsign(dmgcpu.ioHandler.registers[0x4A]) + 1) {		// Compare against WY reg
+   savedWindowDataSelect = bgWindowDataSelect;
+  }
+
+ // Can't disable background on GBC (?!).  Apperently not, according to BGB
+  if ((!bgEnabled) && (!dmgcpu.gbcFeatures)) return;
 
   int xPixelOfs = JavaBoy.unsign(dmgcpu.ioHandler.registers[0x43]) % 8;
   int yPixelOfs = JavaBoy.unsign(dmgcpu.ioHandler.registers[0x42]) % 8;
@@ -260,11 +297,12 @@ class TileBasedGraphicsChip extends GraphicsChip {
      attribs = TILE_BKG;
     }
 
+
     if (tiles[tileNum].invalid(attribs)) {
      tiles[tileNum].validate(videoRam, vidMemAddr, attribs);
     }
     tiles[tileNum].
-       draw(back, (8 * x) - xPixelOfs, (8 * y) - yPixelOfs, attribs);
+      draw(back, (8 * x) - xPixelOfs, (8 * y) - yPixelOfs, attribs);
    }
 //   System.out.print((8 * y) - yPixelOfs + " ");
 
@@ -397,7 +435,8 @@ class TileBasedGraphicsChip extends GraphicsChip {
     for (int x = 0; x < 21 - (wx / 8); x++) {
      tileAddress = windowStartAddress + (y * 32) + x;
 
-     if (!bgWindowDataSelect) {
+//     if (!bgWindowDataSelect) {
+     if (!savedWindowDataSelect) {
       tileNum = 256 + videoRam[tileAddress];
       } else {
       tileNum = JavaBoy.unsign(videoRam[tileAddress]);
@@ -405,7 +444,7 @@ class TileBasedGraphicsChip extends GraphicsChip {
      tileDataAddress = tileNum << 4;
 
      if (dmgcpu.gbcFeatures) {
-      attribData = videoRam[tileAddress + 0x2000];
+      attribData = JavaBoy.unsign(videoRam[tileAddress + 0x2000]);
 
       attribs = (attribData & 0x07) << 2;
 
@@ -425,16 +464,18 @@ class TileBasedGraphicsChip extends GraphicsChip {
       attribs = TILE_BKG;
      }
 
-     if (tiles[tileNum].invalid(attribs)) {
-      tiles[tileNum].validate(videoRam, tileDataAddress, attribs);
+	 if (wy + y * 8 < windowStopLine) {
+      if (tiles[tileNum].invalid(attribs)) {
+       tiles[tileNum].validate(videoRam, tileDataAddress, attribs);
+      }
+      tiles[tileNum].draw(back, wx + x * 8, wy + y * 8, attribs);
      }
-     tiles[tileNum].draw(back, wx + x * 8, wy + y * 8, attribs);
-    }
+	}
    }
   }
 
-
-  if (spritesEnabled) drawSprites(back, 0);
+  // Draw sprites if the flag was on at any time during this frame
+ /* if (spritesEnabledThisFrame) */drawSprites(back, 0);
 
   if ((spritesEnabled) && (dmgcpu.gbcFeatures)) {
    drawSprites(back, 1);
@@ -524,7 +565,12 @@ class TileBasedGraphicsChip extends GraphicsChip {
    if (image[attribs] == null) {
     allocateImage(attribs, a);
    }
+ 
    GameboyPalette pal;
+
+   if (offset == 0x31E0) {
+//	 System.out.println("window updated with " + JavaBoy.hexByte(attribs) + " xflip = " + (attribs & TILE_FLIPX) + "  yflip = " + (attribs & TILE_FLIPY));
+   }
 
    if (dmgcpu.gbcFeatures) {
     if (attribs < 32) {

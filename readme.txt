@@ -1,5 +1,5 @@
 
-                                 JavaBoy v0.91
+                                 JavaBoy v0.92
                      The portable Gameboy emulator for Java
                http://www.millstone.demon.co.uk/download/javaboy
 
@@ -152,18 +152,21 @@ To set the URL used for saves, include the following in your <APPLET> tag:
 <PARAM NAME="USERNAME" VALUE="[Your user here]">
 
 The SaveRamURL is the address that save data is submitted to, and the
-LoadRamURL is the address that data is loaded from.
+LoadRamURL is the address that data is loaded from.  Any parameters included
+in the urls are sent to the script as well.
 
 The Username allows you to keep several user's saves private.  The username
 is passed to the url to allow the server to determine who's save is in use.
+THis is entirely optional though, you may prefer to generate a user id and
+append it to the base urls.
 
-When these parameters are specified, two extra options appear on JavaBoy's
-menu, Save and Load.
+When enabled, two extra options appear on JavaBoy's applet menu, Save 
+and Load.
 
 When Save is selected, JavaBoy opens a connection to the SaveRamURL.  
-The field is called 'user'.  The POST section of the request contains the 
-folllowing fields:
+The POST section of the request contains the folllowing fields:
 
+'romname' - The filename of the ROM being played
 'gamename' - The name of the game being played (internal ROM name)
 'user' - The user that was passed to the applet as the 'USERNAME' parameter.
 'datalength' - The number of bytes that need to be saved.
@@ -174,9 +177,9 @@ The applet doesn't require any particular response from the server.
 
 When Loading data, a similar process occurs.  This time, the user variable
 is passed on the GET method of the URL, which lets the server determine
-which user is performing the load.  The 'gamename' variable is sent via
-the POST method.  The server must respond with the 'data0' field which
-was sent to it when the game was saved. 
+which user is performing the load.  The 'gamename' variable and the
+'romname' variable is sent via the POST method.  The server must respond 
+with the 'data0' field which was sent to it when the game was saved. 
 
 If there was no save data, the user should return with the string 
 'NOSAVERAM'.  A general error condition can be indicated by returning

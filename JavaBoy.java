@@ -50,7 +50,37 @@ Applet Mode Changes
 Emulation Changes
 - Fixed printing of HDMA data to console slowing down games - Done
 
+Version 0.92
 
+Emulation Changes
+- Fixed LCDC interrupt LCY flag.  Fixes crash in 'Max' and graphical corruption on
+  intro to 'Rayman', 'Donkey Kong Country GBC', and probably others. !!! Check Max Again !!!
+- Fixed problem when grabbing the next instruction when executing right next to the 
+  end of memory.  Fixes crahes on 'G&W Gallery 3', 'Millipede/Centipede' and others
+- Fixed P10-P13 interrupt handling.  Fixes controls in Double Dragon 3 menus, 
+  Lawnmower Man, and others.
+- Added hack to unscramble status bars on many games (Aladdin, Pokemon Pinball)
+  that change bank address just before the window starts
+- Changed sprite hiding behaviour.  Now sprites are turned on if they're visible anywhere
+  in the frame.  Doesn't properly support sprite raster effects, but stops them from
+  disappearing. (Elevator Action, Mortal Kombat 4)
+- Fixed debug breakpoint detection (Micro Machines 2, Monster Race 2, others)
+- Changed VBlank line to fix white screen on startup (Home Alone, Dragon Tales)  (check!)
+- Added extra condition to LCD interrupts - that the display should be enabled.  Max works again.
+- Keep on at Mahjong.  Probably display disabled so interrupt never occurs.
+- Note: broken robocop 2, exact instruction timings needed.  poo.  Only worked becuase of bad vblank line.
+- Check mario golf problem.  Did it work before?
+- Fixed comparison with LCY register, Austin Powers - Oh Behave! now works, and GTA status bar isn't scrambled.
+- Found out that on the GBC, the BG enable doesn't do anything(?).  Fixes Dragon Ball Z.
+- Fixed crash when Super Mario Bros DX tries to access the printer
+- Found odd bug where tiles wouldn't validate properly until they were drawn.  Happens on the window layer.  SMBDX shows it up on the Enter/Print menu
+- SF2 broken, but workings when I increase CPU speed.  That breaks music in Pinball Fantasies and Gradius 2 though.  Needs accurate CPU timings.
+- Fix online save RAM bugs
+
+New Features
+- Added support for MBC3 mapper chip.  MBC3 games now work (Pokemon Blue/Crystal mainly.  Gold/silver still doesn't work)
+- Added the MBC3 real time clock.  Pokemon Gold/Silver now work, as well as Harvest Moon GB.
+- Added emulation of the Game Boy Printer (only in application mode for now)
 */
 
 import java.awt.*;
@@ -88,7 +118,7 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
  private static final String hexChars = "0123456789ABCDEF";
 
  /** The version string is displayed on the title bar of the application */
- private static String versionString = "0.91";
+ private static String versionString = "0.92";
 
  private boolean appletRunning = true;
  public static boolean runningAsApplet;
@@ -136,7 +166,7 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
  /** When emulation running, references the current graphics chip implementation */
  GraphicsChip graphicsChip;
 
- /** When connected to another computer, references the current Game link object */
+ /** When connected to another computer or to a Game Boy printer, references the current Game link object */
  GameLink gameLink;
 
  /** Stores the byte which was overwritten at the breakpoint address by the breakpoint instruction */
@@ -434,21 +464,45 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
   int key = e.getKeyCode();
 
   if (key == keyCodes[0]) {
-   dmgcpu.ioHandler.padUp = true;
+//   if (!dmgcpu.ioHandler.padUp) {
+    dmgcpu.ioHandler.padUp = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[1]) {
-   dmgcpu.ioHandler.padDown = true;
+//   if (!dmgcpu.ioHandler.padDown) {
+    dmgcpu.ioHandler.padDown = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[2]) {
-   dmgcpu.ioHandler.padLeft = true;
+//   if (!dmgcpu.ioHandler.padLeft) {
+    dmgcpu.ioHandler.padLeft = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[3]) {
-   dmgcpu.ioHandler.padRight = true;
+//   if (!dmgcpu.ioHandler.padRight) {
+    dmgcpu.ioHandler.padRight = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[4]) {
-   dmgcpu.ioHandler.padA = true;
+//   if (!dmgcpu.ioHandler.padA) {
+    dmgcpu.ioHandler.padA = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[5]) {
-   dmgcpu.ioHandler.padB = true;
+//   if (!dmgcpu.ioHandler.padB) {
+    dmgcpu.ioHandler.padB = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[6]) {
-   dmgcpu.ioHandler.padStart = true;
+//   if (!dmgcpu.ioHandler.padStart) {
+    dmgcpu.ioHandler.padStart = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   } else if (key == keyCodes[7]) {
-   dmgcpu.ioHandler.padSelect = true;
+//   if (!dmgcpu.ioHandler.padSelect) {
+    dmgcpu.ioHandler.padSelect = true;
+    dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
+//   }
   }
 
   switch (key) {
@@ -474,20 +528,28 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
 
   if (key == keyCodes[0]) {
    dmgcpu.ioHandler.padUp = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[1]) {
    dmgcpu.ioHandler.padDown = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[2]) {
    dmgcpu.ioHandler.padLeft = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[3]) {
    dmgcpu.ioHandler.padRight = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[4]) {
    dmgcpu.ioHandler.padA = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[5]) {
    dmgcpu.ioHandler.padB = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[6]) {
    dmgcpu.ioHandler.padStart = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   } else if (key == keyCodes[7]) {
    dmgcpu.ioHandler.padSelect = false;
+   dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_P10);
   }
  }
 
@@ -764,6 +826,7 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
            cartridge.restoreMapping();
            breakpointAddr = -1;
            System.out.println("- Clearing original breakpoint");
+		   dmgcpu.setBreakpoint(false);
           }
           int addr = Integer.valueOf(st.nextToken(), 16).intValue();
           System.out.println("- Setting breakpoint at " + JavaBoy.hexWord(addr));
@@ -771,6 +834,7 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
           breakpointInstr = (short) dmgcpu.addressRead(addr);
           breakpointBank = (short) cartridge.currentBank;
           dmgcpu.addressWrite(addr, 0x52);
+		  dmgcpu.setBreakpoint(true);
          } catch (java.util.NoSuchElementException e) {
           System.out.println("Invalid number of parameters to 'b' command.");
          } catch (NumberFormatException e) {
@@ -857,11 +921,9 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
  }
 
  public void windowActivated(WindowEvent e) {
-  System.out.println("Activated");
  }
 
  public void windowDeactivated(WindowEvent e) {
-  System.out.println("Deactivated");
  }
 
  public JavaBoy() {
@@ -887,9 +949,9 @@ public class JavaBoy extends java.applet.Applet implements Runnable, KeyListener
 //  javaBoy.mainWindow.addWindowListener(javaBoy);
   if (args.length > 0) {
    if (args[0].equals("server")) {
-    javaBoy.gameLink = new GameLink(null);
+    javaBoy.gameLink = new TCPGameLink(null);
    } else if (args[0].equals("client")) {
-    javaBoy.gameLink = new GameLink(null, args[1]);
+    javaBoy.gameLink = new TCPGameLink(null, args[1]);
    }
   }
 //  javaBoy.mainWindow.setGraphicsChip(javaBoy.dmgcpu.graphicsChip);

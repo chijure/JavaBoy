@@ -74,6 +74,7 @@ abstract class GraphicsChip {
  GameboyPalette[] gbcSprite = new GameboyPalette[8];
 
  boolean spritesEnabled = true;
+
  boolean bgEnabled = true;
  boolean winEnabled = true;
 
@@ -111,6 +112,7 @@ abstract class GraphicsChip {
  Component applet;
  int tileStart = 0;
  int vidRamStart = 0;
+
 
 
  /** Create a new GraphicsChip connected to the speicfied CPU */ 

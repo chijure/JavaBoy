@@ -1,3 +1,5 @@
+// Mahjong Quest - Value set at 045E
+
 /*
 
 JavaBoy
@@ -50,7 +52,7 @@ class Dmgcpu {
  /** Registers: 8-bit */
  int a, b, c, d, e, f;
  /** Registers: 16-bit */
- int sp, pc, hl;
+ public int sp, pc, hl;
 
  /** The number of instructions that have been executed since the
   *  last reset
@@ -67,6 +69,9 @@ class Dmgcpu {
 
  /** TRUE when the CPU is currently processing an interrupt */
  boolean inInterrupt = false;
+
+ /** Enable the breakpoint flag.  As breakpoint instruction is used in some games, this is used to skip over it unless the breakpoint is actually in use */
+ boolean breakpointEnable = false;
 
  // Constants for flags register
 
@@ -96,19 +101,19 @@ class Dmgcpu {
  // Constants for interrupts
 
  /** Vertical blank interrupt */
- final short INT_VBLANK =  0x01;
+ public final short INT_VBLANK =  0x01;
 
  /** LCD Coincidence interrupt */
- final short INT_LCDC =    0x02;
+ public final short INT_LCDC =    0x02;
          
  /** TIMA (programmable timer) interrupt */
- final short INT_TIMA =    0x04;
+ public final short INT_TIMA =    0x04;
 
  /** Serial interrupt */
- final short INT_SER =     0x08;
+ public final short INT_SER =     0x08;
 
  /** P10 - P13 (Joypad) interrupt */
- final short INT_P10 =     0x10;
+ public final short INT_P10 =     0x10;
 
  String[] registerNames =
      {"B", "C", "D", "E", "H", "L", "(HL)", "A"};
@@ -150,6 +155,7 @@ class Dmgcpu {
 
   String version = System.getProperty("java.version");
 
+  // Sound not supported until Java 1.2
   java1point3 = !( (version.startsWith("1.0") || version.startsWith("1.1")) );
 
   if (java1point3) {
@@ -191,6 +197,8 @@ class Dmgcpu {
     System.out.println("Tried to read address " + addr + ".  pc = " + JavaBoy.hexWord(pc));
     return 0xFF;
   }*/
+
+  addr = addr & 0xFFFF;
 
   switch ((addr & 0xF000)) {
    case 0x0000 :
@@ -524,7 +532,11 @@ class Dmgcpu {
     pc = 0x58;
     intFlags -= INT_SER;
 //    System.out.println("TIMA Interrupt called");
-   }          /* Other interrupts go here, not done yet */
+   } else if ((intFlags & ieReg & INT_P10) != 0) {	// Joypad interrupt
+    pc = 0x60;
+    intFlags -= INT_P10;
+//	System.out.println("Joypad int.");
+   } /* Other interrupts go here, not done yet */
 
    ioHandler.registers[0x0F] = (byte) intFlags;
    inInterrupt = true;
@@ -534,6 +546,11 @@ class Dmgcpu {
  /** Initiate an interrupt of the specified type */
  public final void triggerInterrupt(int intr) {
   ioHandler.registers[0x0F] |= intr;
+//  System.out.println("Triggered:" + intr);
+ }
+
+ public final void triggerInterruptIfEnabled(int intr) {
+  if ((ioHandler.registers[0xFF] & (short) (intr)) != 0) ioHandler.registers[0x0F] |= intr;
 //  System.out.println("Triggered:" + intr);
  }
 
@@ -553,23 +570,45 @@ class Dmgcpu {
    }
 
    if ((instrCount % INSTRS_PER_HBLANK) == 0) {
-//    System.out.println("Hblank " + ioHandler.registers[0x44]);
+
+
+    // LCY Coincidence
+	// The +1 is due to the LCY register being just about to be incremented
+	int cline = JavaBoy.unsign(ioHandler.registers[0x44]) + 1;
+	if (cline == 152) cline = 0;
+
     if (((ioHandler.registers[0xFF] & INT_LCDC) != 0) &&
-       (ioHandler.registers[0x45] == ioHandler.registers[0x44])) {
+	     ((ioHandler.registers[0x41] & 64) != 0) &&
+       (JavaBoy.unsign(ioHandler.registers[0x45]) == cline) && ((ioHandler.registers[0x40] & 0x80) != 0) && (cline < 0x90)) {
+//    System.out.println("Hblank " + cline);
+//	 System.out.println("** LCDC Int **");
      triggerInterrupt(INT_LCDC);
     }
+
+	// Trigger on every line
+    if (((ioHandler.registers[0xFF] & INT_LCDC) != 0) &&
+	     ((ioHandler.registers[0x41] & 0x8) != 0) && ((ioHandler.registers[0x40] & 0x80) != 0) && (cline < 0x90) ) {
+//	 System.out.println("** LCDC Int **");
+     triggerInterrupt(INT_LCDC);
+    }
+	
+	
 
     if ((gbcFeatures) && (ioHandler.hdmaRunning)) {
      ioHandler.performHdma();
     }
 
-    if (JavaBoy.unsign(ioHandler.registers[0x44]) == 144) {
+    if (JavaBoy.unsign(ioHandler.registers[0x44]) == 143) {
 //     System.out.println("VBLANK!");
      for (int r = 144; r < 170; r++) {
       graphicsChip.notifyScanline(r);
      } 
      if ( ((ioHandler.registers[0x40] & 0x80) != 0) && ((ioHandler.registers[0xFF] & INT_VBLANK) != 0) ) {
       triggerInterrupt(INT_VBLANK);
+	  if ( ((ioHandler.registers[0x41] & 16) != 0) && ((ioHandler.registers[0xFF] & INT_LCDC) != 0) ) {
+       triggerInterrupt(INT_LCDC);
+//	   System.out.println("VBlank LCDC!");
+	  }
      }
 
      boolean speedThrottle = true;
@@ -588,10 +627,14 @@ class Dmgcpu {
 
      
     }
-    graphicsChip.notifyScanline(JavaBoy.unsign(ioHandler.registers[0x44]));
-    ioHandler.registers[0x44] = (byte) (JavaBoy.unsign(ioHandler.registers[0x44]) + 1);
 
-    if (JavaBoy.unsign(ioHandler.registers[0x44]) >= 155) {
+
+	graphicsChip.notifyScanline(JavaBoy.unsign(ioHandler.registers[0x44]));
+    ioHandler.registers[0x44] = (byte) (JavaBoy.unsign(ioHandler.registers[0x44]) + 1);
+//	System.out.println("Reg 44 = " + JavaBoy.unsign(ioHandler.registers[0x44]));
+
+    if (JavaBoy.unsign(ioHandler.registers[0x44]) >= 153) {
+//     System.out.println("VBlank");
 
      ioHandler.registers[0x44] = 0;
      if (soundChip != null) soundChip.outputSound();
@@ -631,6 +674,7 @@ class Dmgcpu {
    if (j.viewFrameCounter.getState()) {
     System.out.print(" " + JavaBoy.hexWord(pc) + ":" + JavaBoy.hexByte(cartridge.currentBank));
    }*/
+//   System.out.print(" " + JavaBoy.hexWord(pc) + ":" + JavaBoy.hexByte(cartridge.currentBank));
    instrCount++;
 
    b1 = JavaBoy.unsign(addressRead(pc));
@@ -1337,17 +1381,26 @@ class Dmgcpu {
          f = (short) (f & F_ZERO);
         }
         break;
-    case 0x52 :               // Debug breakpoint
-        terminate = true;
-        System.out.println("- Breakpoint reached");
+    case 0x52 :               // Debug breakpoint (LD D, D)
+	    // As this insturction is used in games (why?) only break here if the breakpoint is on in the debugger
+		if (breakpointEnable) {
+         terminate = true;
+         System.out.println("- Breakpoint reached");
+		} else {
+		 pc++;
+		}
         break;
 
     case 0x76 :               // HALT
+ 	    interruptsEnabled = true;
+//		System.out.println("Halted, pc = " + JavaBoy.hexWord(pc));
         while (ioHandler.registers[0x0F] == 0) {
          initiateInterrupts();
          instrCount++;
         }
-        //System.out.println(p + " instructions pruned");
+
+//		System.out.println("intrcount: " + instrCount + " IE: " + JavaBoy.hexByte(ioHandler.registers[0xFF]));
+//		System.out.println(" Finished halt");
         pc++;
         break;
     case 0xAF :               // XOR A, A (== LD A, 0)
@@ -2062,6 +2115,8 @@ class Dmgcpu {
     checkInterrupts();
    }
 
+   cartridge.update();
+
 
    initiateInterrupts();
 
@@ -2074,6 +2129,10 @@ class Dmgcpu {
   }
   running = false;
   terminate = false;
+ }
+
+ public void setBreakpoint(boolean on) {
+  breakpointEnable = on;
  }
 
  /** Output a disassembly of the specified number of instructions starting at the speicifed address.

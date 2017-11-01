@@ -148,8 +148,8 @@ class IoHandler {
   switch (num) {
    // Read Handlers go here
 //   case 0x00 :
-//   System.out.println("Reading Joypad register");
-//    return registers[num];
+  // System.out.println("Reading Joypad register");
+    //return registers[num];
 
    case 0x41 :         // LCDSTAT
 
@@ -177,7 +177,7 @@ class IoHandler {
 
 
 //    System.out.println("Checking LCDSTAT");
-    return (byte) output;
+    return (byte) (output | (registers[0x41] & 0xF8));
 
 //   case 0x44 :
 //    System.out.println("Checking LCDY at " + JavaBoy.hexWord(dmgcpu.pc));
@@ -225,53 +225,67 @@ class IoHandler {
 
   switch (num) {
    case 0x00 :           // FF00 - Joypad
-    short output = 0xFF;
+    short output = 0x0F;
     if ((data & 0x10) == 0x00) {   // P14
      if (padRight) {
-      output -= 1;
+      output &= ~1;
      }
      if (padLeft) {
-      output -= 2;
+      output &= ~2;
      }
      if (padUp) {
-      output -= 4;
+      output &= ~4;
      }
      if (padDown) {
-      output -= 8;
+      output &= ~8;
      }
     }
     if ((data & 0x20) == 0x00) {   // P15
      if (padA) {
-      output -= 0x01;
+      output &= ~0x01;
      }
      if (padB) {
-      output -= 0x02;
+      output &= ~0x02;
      }
      if (padSelect) {
-      output -= 0x04;
+      output &= ~0x04;
      }
      if (padStart) {
-      output -= 0x08;
+      output &= ~0x08;
      }
     }
-    registers[0x00] = (byte) output;
-//    System.out.println("Joypad port = " + JavaBoy.hexByte(data) + " output = " + JavaBoy.hexByte(output));
+	output |= (data & 0xF0);
+    registers[0x00] = (byte) (output);
+//    System.out.println("Joypad port = " + JavaBoy.hexByte(data) + " output = " + JavaBoy.hexByte(output) + "(PC=" + JavaBoy.hexWord(dmgcpu.pc) + ")");
     break;
 
    case 0x02 :           // Serial
 
     registers[0x02] = (byte) data;
 
-    if (dmgcpu.gameLink == null) {  // Simulate no gameboy present
+	if (dmgcpu.gameLink != null) {					// Game Link is connected to serial port
+		if (((JavaBoy.unsign(data) & 0x81) == 0x81)) {
+	     dmgcpu.gameLink.send(registers[0x01]);
+		}
+	} else {
+ 	  if ((registers[0x02] & 0x01) == 1) {
+       registers[0x01] = (byte) 0xFF; // when no LAN connection, always receive 0xFF from port.  Simulates empty socket.
+       if (dmgcpu.running) dmgcpu.triggerInterruptIfEnabled(dmgcpu.INT_SER);
+       registers[0x02] &= 0x7F;
+	  }
+	}
 
+/*    if (dmgcpu.gameLink == null) {  // Simulate no gameboy present
      if ((registers[0x02] & 0x01) == 1) {
+	  //System.out.println("Sent byte: " + JavaBoy.hexByte(JavaBoy.unsign(registers[0x01])));
       registers[0x01] = (byte) 0xFF; // when no LAN connection
+      dmgcpu.triggerInterrupt(dmgcpu.INT_SER);
       registers[0x02] &= 0x7F;
      }
     } else if (((JavaBoy.unsign(data) & 0x81) == 0x81) && (dmgcpu.gameLink != null)) {
      dmgcpu.gameLink.send(registers[0x01]);
     }
-//    System.out.println(JavaBoy.hexWord(dmgcpu.pc));
+//    System.out.println(JavaBoy.hexWord(dmgcpu.pc));*/
     break;
 
    case 0x04 :           // DIV
@@ -573,6 +587,11 @@ class IoHandler {
     registers[0x40] = (byte) data;
     break;
 
+   case 0x41 :
+//    System.out.println("STAT set to " + data + " lcdc is " + JavaBoy.unsign(registers[0x44]) + " pc is " + JavaBoy.hexWord(dmgcpu.pc));
+	registers[0x41] = (byte) data;
+	break;
+
    case 0x42 :           // SCY
 //    System.out.println("SCY set to " + data + " lcdc is " + JavaBoy.unsign(registers[0x44]) + " pc is " + JavaBoy.hexWord(dmgcpu.pc));
     registers[0x42] = (byte) data;
@@ -642,12 +661,12 @@ class IoHandler {
     } else {
      if ((JavaBoy.unsign(data) & 0x80) == 0x80) {
       hdmaRunning = true;
-      System.out.println("HDMA started");
+//      System.out.println("HDMA started");
       registers[0x55] = (byte) (data & 0x7F);
       break;
      } else if ((hdmaRunning) && ((JavaBoy.unsign(data) & 0x80) == 0)) {
       hdmaRunning = false;
-      System.out.println("HDMA stopped");
+//      System.out.println("HDMA stopped");
      }
     }
 
