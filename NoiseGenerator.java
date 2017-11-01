@@ -27,6 +27,7 @@ import java.lang.*;
 import java.io.*;
 import java.applet.*;
 import java.net.*;
+import java.util.Random;
 import java.awt.event.KeyListener;
 import java.awt.event.WindowListener;
 import java.awt.event.ActionListener;
@@ -80,6 +81,15 @@ class NoiseGenerator {
 
  int counterEnvelope;
 
+ /** Stores the random values emulating the polynomial generator (badly!) */
+ boolean randomValues[];
+
+ int dividingRatio;
+ int polynomialSteps;
+ int shiftClockFreq;
+ int finalFreq;
+ int cycleOffset;
+
  /** Creates a white noise generator with the specified wavelength, amplitude, channel, and sample rate */
  public NoiseGenerator(int waveLength, int ampl, int chan, int rate) {
   cycleLength = waveLength;
@@ -87,7 +97,19 @@ class NoiseGenerator {
   cyclePos = 0;
   channel = chan;
   sampleRate = rate;
- }
+  cycleOffset = 0;
+
+   randomValues = new boolean[32767];
+
+  Random rand = new java.util.Random();
+
+  
+  for (int r = 0; r < 32767; r++) {
+	randomValues[r] = rand.nextBoolean();
+  }
+
+  cycleOffset = 0;
+}
 
  /** Creates a white noise generator with the specified sample rate */
  public NoiseGenerator(int rate) {
@@ -97,6 +119,17 @@ class NoiseGenerator {
   totalLength = 0;
   sampleRate = rate;
   amplitude = 32;
+
+  randomValues = new boolean[32767];
+
+  Random rand = new java.util.Random();
+
+  
+  for (int r = 0; r < 32767; r++) {
+	randomValues[r] = rand.nextBoolean();
+  }
+
+  cycleOffset = 0;
  }
 
 
@@ -126,6 +159,28 @@ class NoiseGenerator {
   }
  }
 
+ public void setParameters(float dividingRatio, boolean polynomialSteps, int shiftClockFreq) {
+  this.dividingRatio = (int) dividingRatio;
+  if (!polynomialSteps) {
+   this.polynomialSteps = 32767;
+   cycleLength = 32767 << 8;
+   cycleOffset = 0;
+  } else {
+   this.polynomialSteps = 63;
+   cycleLength = 63 << 8;
+
+   java.util.Random rand = new java.util.Random();
+
+   cycleOffset = (int) (rand.nextFloat() * 1000);
+  }
+  this.shiftClockFreq = shiftClockFreq;
+
+  if (dividingRatio == 0) dividingRatio = 0.5f;
+
+  finalFreq = ((int) (4194304 / 8 / dividingRatio)) >> (shiftClockFreq + 1);
+//  System.out.println("dr:" + dividingRatio + "  steps: " + this.polynomialSteps + "  shift:" + shiftClockFreq + "  = Freq:" + finalFreq);
+ }
+
  /** Output a single frame of samples, of specified length.  Start at position indicated in the
   *  output array.
   */
@@ -145,6 +200,23 @@ class NoiseGenerator {
      }
     }
    }
+
+
+   int step = ((finalFreq) / (sampleRate >> 8));
+  // System.out.println("Step=" + step);
+
+   for (int r = offset; r < offset + length; r++) {
+	boolean value = randomValues[((cycleOffset ) + (cyclePos >> 8)) & 0x7FFF];
+	int v = value? (amplitude / 2): (-amplitude / 2);
+
+    if ((channel & CHAN_LEFT) != 0) b[r * 2] += v;
+    if ((channel & CHAN_RIGHT) != 0) b[r * 2 + 1] += v;
+    if ((channel & CHAN_MONO) != 0) b[r] += v;
+   
+    cyclePos = (cyclePos + step) % cycleLength;
+  }
+
+   /*
    for (int r = offset; r < offset + length; r++) {
     val = (int) ((Math.random() * amplitude * 2) - amplitude);
 
@@ -156,7 +228,7 @@ class NoiseGenerator {
 
     cyclePos = (cyclePos + 256) % cycleLength;
 
-   }
+   }*/
   }
  }
 

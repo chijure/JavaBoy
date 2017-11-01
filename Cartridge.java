@@ -89,6 +89,13 @@ class Cartridge {
      "ROM+MBC5+RUMBLE+RAM",  /* 1D */
      "ROM+MBC5+RUMBLE+RAM+BATTERY"  /* 1E */  };
 
+  /** Compressed file types */
+  final byte bNotCompressed = 0;
+  final byte bZip = 1;
+  final byte bJar = 2;
+  final byte bGZip = 3;
+
+
  /** Contains the complete ROM image of the cartridge */
  public byte[] rom;
 
@@ -122,6 +129,8 @@ class Cartridge {
  /** The filename of the currently loaded ROM */
  String romFileName;
 
+ String cartName;
+
  boolean cartridgeReady = false;
 
  /** Create a cartridge object, loading ROM and any associated battery RAM from the cartridge
@@ -131,28 +140,34 @@ class Cartridge {
   this.romFileName = romFileName;
   InputStream is = null;
   try {
-   if (JavaBoy.runningAsApplet) {
+/*   if (JavaBoy.runningAsApplet) {
     Applet myApplet = (Applet) a;
     is = new URL(myApplet.getDocumentBase(), romFileName).openStream();
    } else {
     is = new FileInputStream(new File(romFileName));
-   }
-   rom = new byte[0x04000];
+   }*/
+   is = openRom(romFileName, a);
+   byte[] firstBank = new byte[0x04000];
 
    int total = 0x04000;
    do {
-    total -= is.read(rom, 0x04000 - total, total);      // Read the first bank (bank 0)
+    total -= is.read(firstBank, 0x04000 - total, total);      // Read the first bank (bank 0)
    } while (total > 0);
 
-   cartType = rom[0x0147];
+   cartType = firstBank[0x0147];
 
-   numBanks = lookUpCartSize(rom[0x0148]);   // Determine the number of 16kb rom banks
+   numBanks = lookUpCartSize(firstBank[0x0148]);   // Determine the number of 16kb rom banks
 
-   is.close();
-   is = new FileInputStream(new File(romFileName));
-
+//   is.close();
+//   is = new FileInputStream(new File(romFileName));
    rom = new byte[0x04000 * numBanks];   // Recreate the ROM array with the correct size
-   total = 0x04000 * numBanks;           // Calculate total ROM size
+
+   // Copy first bank into main rom array
+   for (int r = 0; r < 0x4000; r++) {
+    rom[r] = firstBank[r];
+   }
+   
+   total = 0x04000 * (numBanks - 1);           // Calculate total ROM size (first one already loaded)
    do {                                  // Read ROM into memory
     total -= is.read(rom, rom.length - total, total); // Read the entire ROM
    } while (total > 0);
@@ -165,7 +180,10 @@ class Cartridge {
     new ModalDialog((Frame) a, "Warning", "This cartridge has an invalid checksum.", "It may not execute correctly.");
    }
 
-   loadBatteryRam();
+   if (!JavaBoy.runningAsApplet) {
+    loadBatteryRam();
+   }
+
    cartridgeReady = true;
 
   } catch (IOException e) {
@@ -178,47 +196,97 @@ class Cartridge {
 
  }
 
- public Cartridge(URL documentBase, String romFileName, Component a) {
-  applet = a; /* 5823 */
-  this.romFileName = romFileName;
-  InputStream is = null;
-  try {
-   is = new URL(documentBase, romFileName).openStream();
-   rom = new byte[0x04000];
+ 
+ public InputStream openRom(String romFileName, Component a) {
+     byte bFormat;
+	 boolean bFoundGBROM = false;
+	 String romName = "None";
 
-   int total = 0x04000;
-   do {
-    total -= is.read(rom, 0x04000 - total, total);      // Read the first bank (bank 0)
-   } while (total > 0);
+     if (romFileName.toUpperCase().indexOf("ZIP") > -1) {
+       bFormat = bZip;
+     } else if (romFileName.toUpperCase().indexOf("JAR") > -1) {
+       bFormat = bZip;
+     } else if (romFileName.toUpperCase().indexOf("GZ") > -1) {
+       bFormat = bGZip;
+     } else {
+       bFormat = bNotCompressed;
+     }
 
-   cartType = rom[0x0147];
-   numBanks = lookUpCartSize(rom[0x0148]);   // Determine the number of 16kb rom banks
+	// Simplest case, open plain gb or gbc file.
+     if (bFormat == bNotCompressed) {
+	   try {
+	    if (JavaBoy.runningAsApplet) {
+		 return new java.net.URL(((Applet) (a)).getDocumentBase(), romFileName).openStream();
+		} else {
+  	     return new FileInputStream(new File(romFileName));
+		}
+	   } catch (Exception e) {
+	    System.out.println("Cant open file");
+        return null;
+	   }
+	 }
 
-   is.close();
-   is = new URL(documentBase, romFileName).openStream();
+   // Should the ROM be loaded from a ZIP compressed file?
+    if (bFormat == bZip) { 
+       System.out.println("Loading ZIP Compressed ROM");
+	
+	   java.util.zip.ZipInputStream zip;
 
-   rom = new byte[0x04000 * numBanks];   // Recreate the ROM array with the correct size
-   total = 0x04000 * numBanks;           // Calculate total ROM size
-   do {                                  // Read ROM into memory
-    total -= is.read(rom, rom.length - total, total); // Read the entire ROM
-   } while (total > 0);
-   is.close();
+	   try {
+		
+		   if (JavaBoy.runningAsApplet) {
+			zip = new java.util.zip.ZipInputStream(new java.net.URL(((Applet) (a)).getDocumentBase(), romFileName).openStream());
+		   } else {
+			zip = new java.util.zip.ZipInputStream(new java.io.FileInputStream(romFileName));
+		   }
 
-   JavaBoy.debugLog("Loaded ROM '" + romFileName + "'.  " + numBanks + " banks, " + (numBanks * 16) + "Kb.");
-   JavaBoy.debugLog("Type: " + cartTypeTable[cartType]);
 
-   loadBatteryRam();
+		   // Check for valid files (GB or GBC ending in filename)
+		   java.util.zip.ZipEntry ze;
 
-   cartridgeReady = true;
+		   while ((ze = zip.getNextEntry()) != null) {
+			 String str = ze.getName();
+			 if (str.toUpperCase().indexOf(".GB") > -1 || str.toUpperCase().indexOf(".GBC") > -1) {
+			   bFoundGBROM = true;
+			   romName = str;
+			   // Leave loop if a ROM was found.
+			   break;
+			 }
+		   }
+		   // Show an error if no ROM file was found in the ZIP
+		   if (!bFoundGBROM) {
+			 if (JavaBoy.runningAsApplet) {
+				 new ModalDialog((Frame) a, "Error", "No GBx ROM found!", "");
+			 }
+			 System.err.println("No GBx ROM found!");
+			 throw new java.io.IOException("ERROR");
+		   }
+		   if (!JavaBoy.runningAsApplet) {
+			 System.out.println("Found " + romName);
+		   }
+		   return zip;
+	  } catch (Exception e) {
+		 System.out.println(e);
+		 return null;
+	  }
+     }
 
-  } catch (IOException e) {
-   System.out.println("Error opening ROM image '" + romFileName + "'!");
-  } catch (IndexOutOfBoundsException e) {
-   new ModalDialog((Frame) a, "Error",
-     "Loading the ROM image failed.",
-     "The file is not a valid Gameboy ROM.");
-  }
+     if (bFormat == bGZip) {
+       System.out.println("Loading GZIP Compressed ROM");
+	   try {
+ 	    if (JavaBoy.runningAsApplet) {
+    	    return new java.util.zip.GZIPInputStream(new java.net.URL(((Applet) (a)).getDocumentBase(), romFileName).openStream());
+	    } else {
+	        return new java.util.zip.GZIPInputStream(new java.io.FileInputStream(romFileName));
+	    }
+	   } catch (Exception e) {
+        System.out.println("Can't open file");
+		return null;
+	   }
+	 }
 
+   // Will never get here
+   return null;
  }
 
  /** Returns the byte currently mapped to a CPU address.  Addr must be in the range 0x0000 - 0x4000 or
@@ -496,7 +564,9 @@ class Cartridge {
 
  /** Peforms saving of the battery RAM before the object is discarded */
  public void dispose() {
-  saveBatteryRam();
+  if (!JavaBoy.runningAsApplet) {
+   saveBatteryRam();
+  }
   disposed = true;
  }
 
@@ -513,17 +583,32 @@ class Cartridge {
   return checkSum == total;
  }
 
+ /** Gets the cartridge name */
+ String getCartName() {
+	return cartName;
+ }
+
  /** Outputs information about the loaded cartridge to stdout. */
  public void outputCartInfo() {
   boolean checksumOk;
 
-  String cartName = new String(rom, 0x0134, 16);
+  cartName = new String(rom, 0x0134, 16);
                         // Extract the game name from the cartridge header
   
 //  JavaBoy.debugLog(rom[0x14F]+ " "+ rom[0x14E]);
 
 
   checksumOk = verifyChecksum();
+
+
+  // Remove NULLs from the end of the cart name
+  String s = "";
+  for (int r = 0; r < cartName.length(); r++) {
+	if ((int) cartName.charAt(r) != 0) {
+	 s += cartName.charAt(r);
+	}
+  }
+  cartName = s;
 
   String infoString = "ROM Info: Name = " + cartName +
                       ", Size = " + (numBanks * 128) + "Kbit, ";

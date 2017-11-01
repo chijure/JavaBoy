@@ -45,8 +45,8 @@ import javax.sound.sampled.*;
  *  to provide the user interface.
  */
 
-class GameBoyScreen extends Frame implements ActionListener, KeyListener,
-   ComponentListener, ItemListener, WindowListener {
+class GameBoyScreen extends Frame implements ActionListener,
+   ComponentListener, ItemListener  {
  GraphicsChip graphicsChip = null;
  JavaBoy applet;
 
@@ -82,11 +82,6 @@ class GameBoyScreen extends Frame implements ActionListener, KeyListener,
 
  TextField hostAddress;
  Dialog connectDialog;
-
- Dialog controlsDialog;
- Hashtable keyNames;
-
- TextField[] controlsField = new TextField[8];
 
  CheckboxMenuItem[] schemes =
    new CheckboxMenuItem[JavaBoy.schemeNames.length];
@@ -290,61 +285,8 @@ class GameBoyScreen extends Frame implements ActionListener, KeyListener,
 
   setMenuBar(menuBar);
 
-  keyNames = new Hashtable();
-  keyNames.put(new Integer(38), "Up arrow");
-  keyNames.put(new Integer(40), "Down arrow");
-  keyNames.put(new Integer(37), "Left arrow");
-  keyNames.put(new Integer(39), "Right arrow");
-  keyNames.put(new Integer(36), "Pad 7");
-  keyNames.put(new Integer(33), "Pad 9");
-  keyNames.put(new Integer(35), "Pad 1");
-  keyNames.put(new Integer(64), "Pad 3");
-  keyNames.put(new Integer(12), "Pad 5");
-  keyNames.put(new Integer(155), "Insert");
-  keyNames.put(new Integer(36), "Home");
-  keyNames.put(new Integer(33), "Page up");
-  keyNames.put(new Integer(127), "Delete");
-  keyNames.put(new Integer(35), "End");
-  keyNames.put(new Integer(34), "Page down");
-  keyNames.put(new Integer(10), "Return");
-  keyNames.put(new Integer(16), "Shift");
-  keyNames.put(new Integer(17), "Control");
-  keyNames.put(new Integer(18), "Alt");
-  keyNames.put(new Integer(32), "Space");
-  keyNames.put(new Integer(20), "Caps lock");
-  keyNames.put(new Integer(8), "Backspace");
-
  }
 
-/*
- public void makeConnectDialog() {
-  connectDialog = new Dialog(this, "Game Link connect", true);
-  Panel p1 = new Panel();
-  Panel p2 = new Panel();
-
-  p1.add(new Label("Host address:"), "North");
-  hostAddress = new TextField(35);
-  p1.add(hostAddress, "South");
-
-  Button connectButton = new Button("Connect");
-  connectButton.setActionCommand("Connect ok");
-  connectButton.addActionListener(this);
-
-  Button cancelButton = new Button("Cancel");
-  cancelButton.setActionCommand("Connect cancel");
-  cancelButton.addActionListener(this);
-
-  p2.add(cancelButton, "West");
-  p2.add(connectButton, "East");
-
-  connectDialog.add(p1, "North");
-  connectDialog.add(p2, "South");
-
-  connectDialog.setSize(350, 125);
-  connectDialog.setResizable(false);
-  connectDialog.show();
- }
-*/
 
  /** Creates a connection dialog for Game Link connections */
  public void makeConnectDialog() {
@@ -378,92 +320,6 @@ class GameBoyScreen extends Frame implements ActionListener, KeyListener,
   connectDialog.show();
  }
 
-
- public TextField addControlsLine(Dialog d, String name) {
-  d.add(new Label(name));
-  TextField t = new TextField(4);
-  t.addKeyListener(this);
-  d.add(t);
-  return t;
- }
-
- public void keyPressed(KeyEvent e) {
- }
-
- public String getKeyDesc(int code, char c) {
-  if (keyNames.containsKey(new Integer(code))) {
-   return (String) keyNames.get(new Integer(code));
-  } else {
-   return c + "";
-  }
- }
-
- public void keyReleased(KeyEvent e) {
-  System.out.println(e.getKeyCode() + ", " + e.getKeyChar());
-
-  for (int r = 0; r < 8; r++) {
-   if (e.getSource() == controlsField[r]) {
-    controlsField[r].setText(getKeyDesc(e.getKeyCode(), e.getKeyChar()) + " (" + e.getKeyCode() + ")");
-    JavaBoy.keyCodes[r] = e.getKeyCode();
-   }
-  }
- }
-
- public void keyTyped(KeyEvent e) {
- }
-
- public void windowClosed(WindowEvent e) {
- }
-
- public void windowClosing(WindowEvent e) {
-  controlsDialog.hide();
- }
-
- public void windowOpened(WindowEvent e) {
- }
-
- public void windowIconified(WindowEvent e) {
- }
-
- public void windowDeiconified(WindowEvent e) {
- }
-
- public void windowActivated(WindowEvent e) {
- }
-
- public void windowDeactivated(WindowEvent e) {
- }
-
- public void makeControlsDialog() {
-  controlsDialog = new Dialog(this, "Define controls", true);
-  GridLayout g = new GridLayout(9, 2, 12, 12);
-
-  controlsDialog.setLayout(g);
-
-  controlsField[0] = addControlsLine(controlsDialog, "D-pad up:");
-  controlsField[1] = addControlsLine(controlsDialog, "D-pad down:");
-  controlsField[2] = addControlsLine(controlsDialog, "D-pad left:");
-  controlsField[3] = addControlsLine(controlsDialog, "D-pad right:");
-  controlsField[4] = addControlsLine(controlsDialog, "A button:");
-  controlsField[5] = addControlsLine(controlsDialog, "B button:");
-  controlsField[6] = addControlsLine(controlsDialog, "Start button:");
-  controlsField[7] = addControlsLine(controlsDialog, "Select button:");
-
-  for (int r = 0; r < 8; r++) {
-   controlsField[r].setText(getKeyDesc(JavaBoy.keyCodes[r], (char) JavaBoy.keyCodes[r])
-      + " (" + JavaBoy.keyCodes[r] + ")");
-  }
-
-  Button cancel = new Button("Close");
-  cancel.setActionCommand("Controls close");
-  cancel.addActionListener(this);
-  controlsDialog.add(cancel);
-
-  controlsDialog.setSize(230, 300);
-  controlsDialog.setResizable(false);
-  controlsDialog.addWindowListener(this);
-  controlsDialog.show();
- }
 
  /** Sets the current GraphicsChip object which is responsible for drawing the screen */
  public void setGraphicsChip(GraphicsChip g) {
@@ -627,7 +483,8 @@ class GameBoyScreen extends Frame implements ActionListener, KeyListener,
   } else if (command.equals("Pause")) {
    applet.dmgcpu.terminate = true;
   } else if (command.equals("Controls")) {
-   makeControlsDialog();
+//   makeControlsDialog();
+   new DefineControls();
   } else if (command.equals("Execute script")) {
    if (applet.dmgcpu != null) {
     FileDialog fd = new FileDialog(this, "Execute debugger script");
@@ -673,8 +530,6 @@ class GameBoyScreen extends Frame implements ActionListener, KeyListener,
     applet.dmgcpu.gameLink = applet.gameLink;
     applet.gameLink.setDmgcpu(applet.dmgcpu);
    }
-  } else if (command.equals("Controls close")) {
-   controlsDialog.hide();
   } else if (command.equals("Exit")) {
    applet.dispose();
    System.exit(0);
@@ -858,7 +713,7 @@ class GameBoyScreen extends Frame implements ActionListener, KeyListener,
    Dimension d = getSize();
    int x = (d.width / 2) - (graphicsChip.width / 2);
    int y = (d.height / 2) - (graphicsChip.height / 2);
-   graphicsChip.draw(g, x, y + 20, this);
+   boolean b = graphicsChip.draw(g, x, y + 20, this);
    if (viewFrameCounter.getState()) {
     g.setColor(new Color(255, 255, 255));
     g.fillRect(0, d.height - 20, d.width, 20);

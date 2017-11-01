@@ -1,5 +1,5 @@
 
-                                 JavaBoy v0.8
+                                 JavaBoy v0.9
                      The portable Gameboy emulator for Java
                http://www.millstone.demon.co.uk/download/javaboy
 
@@ -66,6 +66,7 @@ A: First, create an HTML file with the following tag:
 
 <APPLET CODE="JavaBoy.class" WIDTH=160 HEIGHT=144>
 <PARAM NAME="ROMIMAGE" VALUE="*Enter name of ROM image here*">
+<PARAM NAME="SOUND" VALUE="ON">
 </APPLET> 
 
 Then, place the HTML file, the ROM image, and all the emulator files 
@@ -78,6 +79,14 @@ the standard colours. More features may be supported in the next version.
 One advantage to this mode is that the user needn't install a Java
 runtime environment, as the necessary libraries are supplied with your
 web browser.
+
+Q: Can JavaBoy load compressed ROM images? 
+
+A: Yes, ROMs can be loaded in ZIP/JAR or GZip format. In the application
+version, just select the name of the Zip file when you choose File/Open. 
+For the applet version, use the name of the Zip file in the "ROMIMAGE" 
+parameter to the applet. For ZIP/JAR files, the first .GB or .GBC file 
+in the Zip will be used. GZip files cannot be Tarred, or they won't work. 
 
 Q: Can I use JavaBoy on my web page? 
 

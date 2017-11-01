@@ -454,6 +454,14 @@ class IoHandler {
     registers[0x21] = (byte) data;
     break;
 
+   case 0x22 :           // Sound channel 4, polynomial parameters
+    if (soundOn) dmgcpu.soundChip.channel4.setParameters(
+      (JavaBoy.unsign(data) & 0x07),
+      (JavaBoy.unsign(data) & 0x08) == 8,
+      (JavaBoy.unsign(data) & 0xF0) >> 4);
+	registers[0x22] = (byte) data;
+    break;
+
    case 0x23 :          // Sound channel 4, initial/consecutive
     registers[0x23] = (byte) data;
     if (soundOn) {

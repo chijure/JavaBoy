@@ -21,7 +21,10 @@ Place - Suite 330, Boston, MA 02111-1307, USA.
 
 */
 
-import java.awt.*;import java.awt.image.*;import java.lang.*;import java.io.*;
+import java.awt.*;
+import java.awt.image.*;
+import java.lang.*;
+import java.io.*;
 import java.applet.*;
 import java.net.*;
 import java.awt.event.KeyListener;
@@ -151,7 +154,11 @@ class TileBasedGraphicsChip extends GraphicsChip {
    }
 
    if ((spriteAttrib & TILE_FLIPY) != 0) {
-    tiles[tileNum].draw(back, spriteX, spriteY + 8, spriteAttrib);
+    if (doubledSprites) {
+     tiles[tileNum].draw(back, spriteX, spriteY + 8, spriteAttrib);
+	} else {
+     tiles[tileNum].draw(back, spriteX, spriteY, spriteAttrib);
+	}
    } else {
     tiles[tileNum].draw(back, spriteX, spriteY, spriteAttrib);
    }
@@ -274,16 +281,22 @@ class TileBasedGraphicsChip extends GraphicsChip {
   back.fillRect(0, 0, 160 * mag, 144 * mag);
  }
 
+ public boolean isFrameReady() {
+  return (framesDrawn % frameSkip) == 0;
+ }
+
  /** Draw the current graphics frame into the given graphics context */
- public void draw(Graphics g, int startX, int startY, Component a) {
+ public boolean draw(Graphics g, int startX, int startY, Component a) {
   int tileNum;
 
 
-  framesDrawn++;
   calculateFPS();
   if ((framesDrawn % frameSkip) != 0) {
    frameDone = true;
-   return;
+   framesDrawn++;
+   return false;
+  } else {
+   framesDrawn++;
   }
   Graphics back = backBuffer.getGraphics();
 
@@ -444,7 +457,7 @@ class TileBasedGraphicsChip extends GraphicsChip {
   }*/
 
   frameDone = true;
-
+  return true;
  }
 
 

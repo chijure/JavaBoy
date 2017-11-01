@@ -1,0 +1,37 @@
+JavaBoy What's New?
+-------------------
+
+
+Version 0.9
+-----------
+
+Applet Mode Changes (when running on a web page)
+- Fixed ROMS with save RAM not loading when on a web page
+- Applets can be sized other than 1x
+- Applets show strip showing current ROM and other info displayed at start
+- Applets have options menu providing control change, size change, frameskip change, sound toggle
+- Applets have a parameter to turn sound on/off in the applet tag
+
+Application Mode Changes (when running stand-alone)
+- Half-fixed keyboard controls sometimes not starting in application version
+- Fixed random keypressed causing an exception when no ROM loaded
+
+General changes
+- ROMS can optionally be loaded from ZIP/JAR and GZip compressed files (code contributed by Stealth Software)
+
+Emulation Changes
+- Much more accurate emulation of sound channel 4 (noise)
+- Flipped double height sprites are now handled properly
+
+
+v0.81beta
+---------
+
+- Corrected bug in LCDC register for hiding sprites
+- Fixed tile cache memory bug
+
+
+v0.8beta
+--------
+
+- Initial release

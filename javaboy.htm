@@ -18,6 +18,7 @@ as this HTML file.  The file must be called 'game.gb'.</B>
 <TR><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1><B>Gameboy Button</B></TD><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1><B>Key</B></TD></TR>
 
 <TR><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Start</TD><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Return</TD></TR>
+<TR><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Select</TD><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Backspace</TD></TR>
 <TR><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>A</TD><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>X</TD></TR>
 <TR><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>B</TD><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Z</TD></TR>
 <TR><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Up</TD><TD><FONT FACE="Verdana, Arial, Helvetica" SIZE=-1>Cursor up</TD></TR>
@@ -28,15 +29,16 @@ as this HTML file.  The file must be called 'game.gb'.</B>
 <P>
 
 <TABLE BORDER=0 CELLPADDING=0 CELLSPACING=0 ALIGN=CENTER>
-<TR><TD COLSPAN=3><IMG SRC="gbbordertop.jpg"></TD></TR>
-<TR><TD><IMG SRC="gbborderleft.jpg"></TD>
+<TR><TD COLSPAN=3></TD></TR>
+<TR><TD></TD>
     <TD>
-     <APPLET CODE="JavaBoy.class" WIDTH=160 HEIGHT=144>
+     <APPLET CODE="JavaBoy.class" WIDTH=320 HEIGHT=288>
       <PARAM NAME="ROMIMAGE" VALUE="game.gb">
       <PARAM NAME="AUTOSCRIPT" VALUE="startup.scp">
+	  <PARAM NAME="SOUND" VALUE="OFF">
      </APPLET></TD>
-    <TD><IMG SRC="gbborderright.jpg"></TD></TR>
-<TR><TD COLSPAN=3><IMG SRC="gbborderbottom.jpg"></TD></TR>
+    <TD></TD></TR>
+<TR><TD COLSPAN=3></TD></TR>
 </TABLE>
 </CENTER>
 
