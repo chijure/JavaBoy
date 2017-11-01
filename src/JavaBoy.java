@@ -84,25 +84,19 @@ New Features
 */
 
 import java.awt.*;
-import java.awt.image.*;
-import java.lang.*;
 import java.io.*;
-import java.applet.*;
 import java.net.*;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseListener;
 import java.awt.event.WindowListener;
 import java.awt.event.ActionListener;
-import java.awt.event.ComponentListener;
 import java.awt.event.ItemListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
 import java.awt.event.ActionEvent;
-import java.awt.event.ComponentEvent;
 import java.awt.event.ItemEvent;
 import java.awt.event.MouseEvent;
 import java.util.StringTokenizer;
-import javax.sound.sampled.*;
 
 /** This is the main controlling class which contains the main() method
  *  to run JavaBoy as an application, and also the necessary applet methods.
